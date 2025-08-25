@@ -1,7 +1,11 @@
+# Video reference : https://www.youtube.com/watch?v=kMpptn-6jaw
 # Formula: 
 # GELU(x)=x⋅Φ(x)
-# Where Φ(x)
+# Where Φ(x(i,j)) = P(X(i,j)<=x(i,j)) [Implemented using Gauss Error Function]
 # Φ(x) is the cumulative distribution function (CDF) of the standard normal (Gaussian) distribution.
+# Gelu combines the RELU and dropout in deterministic way
+# All the i/p's x fed to the neuron before activation have show normal distribution with N(0,1)
+# ReLU is zero to identity mapping, [x<0 -> 0, x>0 ->x] 
 
 import numpy as np
 
