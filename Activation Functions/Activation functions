@@ -1,0 +1,11 @@
+Resource used:
+1. https://www.youtube.com/watch?v=F5zK8P7UU6I&list=PL1u-h-YIOL0vOwds4QCAco2KMeOt7_zSh
+
+Notes:
+
+Properties that a function should have to be used as activation function:
+1. Non-linearity
+2. Differentiable
+3. Range
+4. Monotonic
+5. Computationaly efficient
