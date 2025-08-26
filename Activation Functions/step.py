@@ -7,11 +7,13 @@
 # 2. Differentiable : Yes
 # 3. Range : Yes
 # 4. Monotonic : Yes
-# 5. Computationaly efficient : Yes
+# 5. Computationaly efficient : Takes longer training time
 
 
 # Step Activation Function
-# Mapping : (-inf, +inf) --> [0, 1]
+# Formula:
+# f(x) = 1 if x => theta else 0
+# Mapping : (-inf, +inf) --> 0 or 1
 # HyperParameter : theta
 # Use Cases: Binary classification
 # Drawback: [0 derivative, Only for binary classification, Hard threshold]
