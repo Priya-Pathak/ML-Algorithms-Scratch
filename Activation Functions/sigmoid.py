@@ -31,10 +31,8 @@ class Sigmoid_function():
         print('Sigmoid value: ',x)
         if x < self.theta:
             print('Result with theta=',self.theta, ' : ',0)
-            return 0
         else:
             print('Result with theta=',self.theta, ' : ',1)
-            return 1
 
 sigmoid_function_1 = Sigmoid_function(theta=0.5)
 sigmoid_function_1.activate(x=32)

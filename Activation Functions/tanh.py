@@ -28,13 +28,12 @@ class Tanh_function():
     
     def activate(self, x):
         x = (np.exp(x)-np.exp(-x))/ (np.exp(x)+np.exp(-x))
-        print('Sigmoid value: ',x)
+        print('Tanh value: ',x)
+        
         if x < self.theta:
             print('Result with theta=',self.theta, ' : ',0)
-            return 0
         else:
             print('Result with theta=',self.theta, ' : ',1)
-            return 1
 
 tanh_function_1 = Tanh_function(theta=0.5)
 tanh_function_1.activate(x=32)
