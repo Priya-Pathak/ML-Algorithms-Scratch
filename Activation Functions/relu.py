@@ -1,5 +1,6 @@
 # Resources used
 # 1. https://www.youtube.com/watch?v=KUrBgoIEQK0&list=PL1u-h-YIOL0vOwds4QCAco2KMeOt7_zSh&index=6
+# 2. https://www.youtube.com/watch?v=90Kxtd8zCHI&list=PL1u-h-YIOL0vOwds4QCAco2KMeOt7_zSh&index=7
 
 # Notes:
 # Does it qualify the list?
@@ -34,3 +35,6 @@ class Relu_function():
 relu_function_1 = Relu_function()
 relu_function_1.activate(x=32)
 relu_function_1.activate(x=-8)
+
+# Variants of relu:
+# 1. Leaky relu: f(x) = max(0.1x,x)
