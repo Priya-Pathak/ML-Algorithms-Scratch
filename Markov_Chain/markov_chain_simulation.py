@@ -26,33 +26,88 @@ class MarkovChain:
         return sequence
 
     def plot_graph(self):
-        """Visualizes the Markov Chain as a directed graph."""
+        """Visualizes the Markov Chain with guaranteed zero overlapping text and clear arrows."""
         G = nx.DiGraph()
-        
-        # Add nodes and weighted edges
         for i, origin in enumerate(self.states):
             for j, destination in enumerate(self.states):
                 weight = self.transition_matrix[i, j]
-                if weight > 0: # Only draw edges with non-zero probability
+                if weight > 0:
                     G.add_edge(origin, destination, weight=weight)
         
-        pos = nx.spring_layout(G, seed=42)
-        plt.figure(figsize=(8, 6))
+        # 1. Fix nodes in a rigid triangle layout with plenty of breathing room
+        # We manually space out the coordinates (x, y) to maximize distance
+        pos = {
+            'Sunny': np.array([0.0, 0.866]),   # Top center
+            'Cloudy': np.array([-1.0, -0.866]), # Bottom left
+            'Rainy': np.array([1.0, -0.866])    # Bottom right
+        }
         
-        # Draw nodes and labels
-        nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='lightblue')
-        nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
+        plt.figure(figsize=(10, 8))
         
-        # Draw edges with curvature to handle bidirectional transitions
-        nx.draw_networkx_edges(G, pos, arrowstyle='->', arrowsize=20, 
-                               connectionstyle='arc3,rad=0.1', width=1.5, edge_color='gray')
+        # Draw background base nodes cleanly
+        nx.draw_networkx_nodes(G, pos, node_size=3000, node_color='#D6EAF8', edgecolors='#34495E', linewidths=2)
+        nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold', font_family='sans-serif')
         
-        # Draw edge labels (probabilities)
-        edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in G.edges(data=True)}
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.3, font_size=10)
+        ax = plt.gca()
         
-        plt.title("Markov Chain State Transition Diagram", fontsize=14)
+        # 2. Manually draw and label edges to handle precise offsets
+        for u, v, d in G.edges(data=True):
+            p1 = pos[u]
+            p2 = pos[v]
+            weight_str = f"{d['weight']:.2f}"
+            
+            if u == v:
+                # --- SELF LOOP HANDLING ---
+                # Determine loop direction based on where the node sits in the triangle
+                if u == 'Sunny':
+                    connectionstyle = "arc3,rad=3"
+                    text_pos = p1 + np.array([0.0, 0.25])
+                elif u == 'Cloudy':
+                    connectionstyle = "arc3,rad=3"
+                    text_pos = p1 + np.array([-0.22, -0.22])
+                else:  # Rainy
+                    connectionstyle = "arc3,rad=-3"
+                    text_pos = p1 + np.array([0.22, -0.22])
+                
+                # Draw the loop arrow
+                ax.annotate("", xy=p1, xytext=p1,
+                            arrowprops=dict(arrowstyle="-|>", color="#7F8C8D", connectionstyle=connectionstyle,
+                                            linewidth=1.8, mutation_scale=20, shrinkA=22, shrinkB=22))
+                
+                # Place the text centered just outside the loop
+                ax.text(text_pos[0], text_pos[1], weight_str, color='#2C3E50', 
+                        fontweight='bold', fontsize=10, ha='center', va='center',
+                        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#BDC3C7", alpha=0.9))
+                
+            else:
+                # --- INTER-STATE EDGES ---
+                # A slight curve pushes A->B away from B->A
+                rad = 0.2
+                ax.annotate("", xy=p2, xytext=p1,
+                            arrowprops=dict(arrowstyle="-|>", color="#7F8C8D", connectionstyle=f"arc3,rad={rad}",
+                                            linewidth=1.8, mutation_scale=20, shrinkA=25, shrinkB=25))
+                
+                # Calculate the exact geometric midpoint of the arc path to place the label
+                midpoint = (p1 + p2) / 2
+                direction = p2 - p1
+                normal = np.array([-direction[1], direction[0]])  # Perpendicular vector
+                normal = normal / np.linalg.norm(normal)
+                
+                # Push the text block outward away from the direct line path so it sits outside the arc
+                text_pos = midpoint + (normal * 0.18) + (direction * 0.05)
+                
+                ax.text(text_pos[0], text_pos[1], weight_str, color='#2C3E50', 
+                        fontweight='bold', fontsize=10, ha='center', va='center',
+                        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#BDC3C7", alpha=0.9))
+        
+        plt.title("Markov Chain State Transition Diagram", fontsize=14, fontweight='bold', pad=25)
         plt.axis('off')
+        
+        # Expand limits so elements close to edges don't get chopped off
+        plt.xlim(-1.5, 1.5)
+        plt.ylim(-1.4, 1.4)
+        
+        plt.tight_layout()
         plt.show()
 
 # --- Execution Example ---
