@@ -1,0 +1,8 @@
+torch
+torchvision
+gradio
+plotly
+pandas
+scikit-learn
+scipy
+numpy
