@@ -98,7 +98,6 @@ def load_weights() -> str:
     if os.path.exists(WEIGHTS_PATH):
         return WEIGHTS_PATH
 
-    # Try downloading from GitHub (works on HF Spaces where local fallback doesn't exist).
     try:
         print(f"Downloading model weights from {WEIGHTS_URL} ...")
         urllib.request.urlretrieve(WEIGHTS_URL, WEIGHTS_PATH)
@@ -107,7 +106,6 @@ def load_weights() -> str:
     except Exception as e:
         print(f"GitHub download failed ({e}), trying local path ...")
 
-    # Local fallback for development.
     if os.path.exists(LOCAL_WEIGHTS):
         import shutil
         shutil.copy2(LOCAL_WEIGHTS, WEIGHTS_PATH)
@@ -135,28 +133,13 @@ def prepare_latent_space():
     Load model + MNIST test set, encode every test image, run t-SNE,
     and build a KDTree for fast nearest-neighbour lookup on click.
 
-    Returns
-    -------
-    fig : plotly.graph_objects.Figure
-        Interactive 2D scatter of the latent space.
-    tree : scipy.spatial.KDTree
-        Nearest-neighbour index over the 2D t-SNE coordinates.
-    z_2d : np.ndarray  (10000, 2)
-        t-SNE coordinates (kept for tree construction).
-    z_mu : np.ndarray  (10000, 20)
-        Raw encoder means (needed for decoding).
-    images : np.ndarray (10000, 28, 28)
-        Original test images.
-    labels : np.ndarray (10000,)
-        Digit labels.
+    Returns: fig, tree, z_2d, z_mu, images, labels, model
     """
-    # --- Model ---
     model = VAE(latent_dim=LATENT_DIM).to(DEVICE)
     weights_path = load_weights()
     model.load_state_dict(torch.load(weights_path, map_location=DEVICE, weights_only=True))
     model.eval()
 
-    # --- MNIST test set ---
     transform = transforms.Compose([transforms.ToTensor()])
     test_dataset = datasets.MNIST(
         root=os.path.join(os.path.dirname(__file__), "data"),
@@ -165,9 +148,7 @@ def prepare_latent_space():
         transform=transform,
     )
 
-    all_mu = []
-    all_labels = []
-    all_images = []
+    all_mu, all_labels, all_images = [], [], []
 
     with torch.no_grad():
         for x, y in test_dataset:
@@ -177,35 +158,23 @@ def prepare_latent_space():
             all_labels.append(y)
             all_images.append(x.squeeze(0).numpy())
 
-    z_mu = np.stack(all_mu)          # (10000, 20)
-    labels = np.array(all_labels)    # (10000,)
-    images = np.stack(all_images)    # (10000, 28, 28)
+    z_mu = np.stack(all_mu)
+    labels = np.array(all_labels)
+    images = np.stack(all_images)
 
-    # --- t-SNE reduction to 2D ---
     tsne = TSNE(n_components=2, random_state=42, perplexity=30)
-    z_2d = tsne.fit_transform(z_mu)  # (10000, 2)
+    z_2d = tsne.fit_transform(z_mu)
 
-    # --- KDTree for click lookup ---
     tree = KDTree(z_2d)
 
-    # --- Plotly scatter ---
-    df = pd.DataFrame({
-        "x": z_2d[:, 0],
-        "y": z_2d[:, 1],
-        "digit": labels.astype(str),
-    })
-
+    df = pd.DataFrame({"x": z_2d[:, 0], "y": z_2d[:, 1], "digit": labels.astype(str)})
     fig = px.scatter(
-        df,
-        x="x",
-        y="y",
-        color="digit",
-        title="MNIST VAE Latent Space (20D → t-SNE 2D)",
+        df, x="x", y="y", color="digit",
+        title="MNIST VAE Latent Space (20D \u2192 t-SNE 2D)",
         labels={"x": "t-SNE 1", "y": "t-SNE 2", "digit": "Digit"},
         opacity=0.6,
         color_discrete_sequence=px.colors.qualitative.Set2,
-        width=900,
-        height=700,
+        width=900, height=700,
     )
     fig.update_traces(marker=dict(size=4, line=dict(width=0.5, color="white")))
     fig.update_layout(
@@ -223,52 +192,95 @@ print("Ready.")
 
 
 # ---------------------------------------------------------------------------
+# JavaScript — finds the Plotly graph rendered by gr.Plot, attaches a
+# plotly_click listener, and auto-fills the coordinate Number inputs.
+# ---------------------------------------------------------------------------
+
+CLICK_JS = r"""
+(async function () {
+    // gr.Plot renders into a div with class "plotly-graph-div" or "js-plotly-plot".
+    // We poll until it appears (it may take a moment after page load).
+    let plotDiv = null;
+    for (let i = 0; i < 120; i++) {
+        plotDiv = document.querySelector(".js-plotly-plot");
+        if (plotDiv && plotDiv._fullLayout) break;
+        await new Promise(r => setTimeout(r, 250));
+    }
+    if (!plotDiv) { console.warn("Plotly graph not found"); return; }
+
+    plotDiv.on("plotly_click", function (data) {
+        var pt = data.points[0];
+        var x = pt.x;
+        var y = pt.y;
+
+        // Locate the two Number inputs via their elem_id
+        var xBox = document.querySelector("#tsne-x input[type='number']");
+        var yBox = document.querySelector("#tsne-y input[type='number']");
+
+        if (!xBox || !yBox) { console.warn("Coordinate inputs not found"); return; }
+
+        // React-controlled inputs need the native setter to update properly
+        var setter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype, "value"
+        ).set;
+
+        setter.call(xBox, x);
+        xBox.dispatchEvent(new Event("input",  { bubbles: true }));
+
+        setter.call(yBox, y);
+        yBox.dispatchEvent(new Event("input",  { bubbles: true }));
+    });
+})();
+"""
+
+
+# ---------------------------------------------------------------------------
 # Gradio callbacks
 # ---------------------------------------------------------------------------
 
 def decode_from_coords(tsne_x, tsne_y):
-    """Decode a point from t-SNE coordinates entered by the user."""
+    """Find the nearest test sample for the given t-SNE coordinates and decode it."""
     if tsne_x is None or tsne_y is None:
-        return None, None, "Enter t-SNE coordinates and click Decode."
+        return None, None, "Click a point on the plot, then press Decode."
 
-    _, idx = TREE.query([tsne_x, tsne_y])
+    _, idx = TREE.query([float(tsne_x), float(tsne_y)])
 
     with torch.no_grad():
-        z = torch.tensor(Z_MU[idx : idx + 1], dtype=torch.float32, device=DEVICE)
+        z = torch.tensor(Z_MU[idx:idx + 1], dtype=torch.float32, device=DEVICE)
         recon = MODEL.decode(z).squeeze().numpy()
 
     recon_img = (recon.reshape(28, 28) * 255).astype(np.uint8)
     orig_img = (IMAGES[idx] * 255).astype(np.uint8)
 
-    return orig_img, recon_img, f"Nearest sample index: {idx} | True digit: {LABELS[idx]}"
+    return orig_img, recon_img, f"Nearest sample index: {idx}  |  True digit: {LABELS[idx]}"
 
 
 def decode_random():
-    """Decode a random point sampled from the latent space."""
+    """Decode a random point from the latent space."""
     idx = np.random.randint(len(Z_MU))
 
     with torch.no_grad():
-        z = torch.tensor(Z_MU[idx : idx + 1], dtype=torch.float32, device=DEVICE)
+        z = torch.tensor(Z_MU[idx:idx + 1], dtype=torch.float32, device=DEVICE)
         recon = MODEL.decode(z).squeeze().numpy()
 
     recon_img = (recon.reshape(28, 28) * 255).astype(np.uint8)
     orig_img = (IMAGES[idx] * 255).astype(np.uint8)
 
-    return orig_img, recon_img, f"Random sample index: {idx} | True digit: {LABELS[idx]}"
+    return orig_img, recon_img, f"Random sample index: {idx}  |  True digit: {LABELS[idx]}"
 
 
 # ---------------------------------------------------------------------------
 # Gradio UI
 # ---------------------------------------------------------------------------
 
-with gr.Blocks(title="VAE Latent Space Explorer") as demo:
+with gr.Blocks(js=CLICK_JS, title="VAE Latent Space Explorer") as demo:
     gr.Markdown(
         "# VAE Latent Space Explorer\n"
         "An MLP Variational Autoencoder trained on MNIST compresses each "
         "28\u00d728 digit image into a 20-dimensional latent vector. "
         "t-SNE projects it to 2D for visualization.\n\n"
-        "Enter t-SNE coordinates (or click **Random Sample**) to see the "
-        "decoded image from that region of latent space."
+        "**Click any point** on the scatter plot to auto-fill the coordinates, "
+        "then press **Decode** to see the reconstructed image."
     )
 
     with gr.Row():
@@ -277,8 +289,8 @@ with gr.Blocks(title="VAE Latent Space Explorer") as demo:
         with gr.Column(scale=2):
             gr.Markdown("### Decode from Latent Space")
             with gr.Row():
-                tsne_x = gr.Number(label="t-SNE 1", value=0.0)
-                tsne_y = gr.Number(label="t-SNE 2", value=0.0)
+                tsne_x = gr.Number(label="t-SNE 1", value=0.0, elem_id="tsne-x")
+                tsne_y = gr.Number(label="t-SNE 2", value=0.0, elem_id="tsne-y")
             with gr.Row():
                 decode_btn = gr.Button("Decode", variant="primary")
                 random_btn = gr.Button("Random Sample")
@@ -286,17 +298,13 @@ with gr.Blocks(title="VAE Latent Space Explorer") as demo:
             recon_image = gr.Image(label="Decoded", height=250)
             info_text = gr.Textbox(label="Info", interactive=False)
 
-    # Load the plot on startup
     demo.load(fn=lambda: FIG, outputs=plot_output)
 
-    # Decode from user-entered coordinates
     decode_btn.click(
         fn=decode_from_coords,
         inputs=[tsne_x, tsne_y],
         outputs=[orig_image, recon_image, info_text],
     )
-
-    # Decode a random sample
     random_btn.click(
         fn=decode_random,
         outputs=[orig_image, recon_image, info_text],
