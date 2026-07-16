@@ -78,12 +78,8 @@ class VAE(nn.Module):
 # Falls back to a local path (the original VAE repo) for local development.
 # ---------------------------------------------------------------------------
 
-WEIGHTS_URL = (
-    "https://raw.githubusercontent.com/Priya-Pathak/VAE/main/"
-    "results/mnist/best_model.pt"
-)
-WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "weights")
-WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "best_model.pt")
+# WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "best_model.pt")
+WEIGHTS_PATH = './best_model.pt'
 
 # Local fallback for development — points to the trained model on disk.
 LOCAL_WEIGHTS = os.path.normpath(
@@ -93,18 +89,9 @@ LOCAL_WEIGHTS = os.path.normpath(
 
 def load_weights() -> str:
     """Load model weights: cache dir > GitHub download > local fallback."""
-    os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
     if os.path.exists(WEIGHTS_PATH):
         return WEIGHTS_PATH
-
-    try:
-        print(f"Downloading model weights from {WEIGHTS_URL} ...")
-        urllib.request.urlretrieve(WEIGHTS_URL, WEIGHTS_PATH)
-        print("Download complete.")
-        return WEIGHTS_PATH
-    except Exception as e:
-        print(f"GitHub download failed ({e}), trying local path ...")
 
     if os.path.exists(LOCAL_WEIGHTS):
         import shutil
@@ -115,8 +102,7 @@ def load_weights() -> str:
     raise FileNotFoundError(
         f"Could not find model weights. Tried:\n"
         f"  1. {WEIGHTS_PATH} (cache)\n"
-        f"  2. {WEIGHTS_URL} (GitHub)\n"
-        f"  3. {LOCAL_WEIGHTS} (local)"
+        f"  2. {LOCAL_WEIGHTS} (local)"
     )
 
 
