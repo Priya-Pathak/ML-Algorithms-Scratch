@@ -1,76 +1,61 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 
-# Define states for readability
-states = ["Novice", "Intermediate", "Competent", "Advanced", "Expert"]
-
-# Transition Probability Matrix (P)
+# 1. Define the 5x5 transition probability matrix (P)
+# Rows & Columns map to: [S0:Novice, S1:Competent, S2:Proficient, S3:Advanced, S4:Expert]
 P = np.array([
-    [0.60, 0.40, 0.00, 0.00, 0.00],  # Novice
-    [0.15, 0.55, 0.30, 0.00, 0.00],  # Intermediate
-    [0.00, 0.15, 0.55, 0.30, 0.00],  # Competent
-    [0.00, 0.00, 0.20, 0.55, 0.25],  # Advanced
-    [0.00, 0.00, 0.00, 0.10, 0.90]   # Expert
+    [0.30, 0.60, 0.10, 0.00, 0.00],  # S0 transitions
+    [0.15, 0.35, 0.45, 0.05, 0.00],  # S1 transitions
+    [0.00, 0.15, 0.40, 0.40, 0.05],  # S2 transitions
+    [0.00, 0.00, 0.20, 0.50, 0.30],  # S3 transitions
+    [0.00, 0.00, 0.00, 0.25, 0.75]   # S4 transitions
 ])
 
-# ==========================================
-# 1. GENERATE STUDENT SIMULATION DATA
-# ==========================================
-np.random.seed(42)
-current_idx = 0  # Start as Novice
-weeks = 52
-timeline = list(range(weeks + 1))
-numerical_history = [current_idx]
+def get_steady_state_algebraic(matrix):
+    """
+    Solves the linear system equations: pi * P = pi and sum(pi) = 1
+    Formulated as: (P^T - I) * pi = 0
+    """
+    n = matrix.shape[0]
+    # Set up the system matrix (Transposed P minus Identity matrix)
+    A = matrix.T - np.eye(n)
+    
+    # Replace the last equation row with the constraint that all probabilities sum to 1
+    A[-1] = np.ones(n)
+    
+    # Target vector (zeros, with the last element as 1 for the sum constraint)
+    b = np.zeros(n)
+    b[-1] = 1.0
+    
+    # Solve the linear system
+    return np.linalg.solve(A, b)
 
-for week in range(weeks):
-    current_idx = np.random.choice(len(states), p=P[current_idx])
-    numerical_history.append(current_idx)
+def get_steady_state_iterative(matrix, iterations=100):
+    """
+    Simulates a population starting entirely as Novices (S0)
+    and multiplies by the transition matrix repeatedly.
+    """
+    # Start vector: 100% of the population starts at S0 (Novice)
+    state_vector = np.array([1.0, 0.0, 0.0, 0.0, 0.0])
+    
+    for _ in range(iterations):
+        state_vector = np.dot(state_vector, matrix)
+        
+    return state_vector
 
-# ==========================================
-# 2. RENDER THE PROFESSIONAL PLOTS
-# ==========================================
-# Create a crisp 2-panel dashboard layout
-fig, axes = plt.subplots(1, 2, figsize=(16, 6), gridspec_kw={'width_ratios': [1, 1.3]})
-sns.set_theme(style="whitegrid")
+# --- Execution ---
+states = ["S0 (Novice)", "S1 (Competent)", "S2 (Proficient)", "S3 (Advanced)", "S4 (Expert)"]
 
-# --- Left Panel: Transition Probability Matrix Heatmap ---
-sns.heatmap(
-    P, 
-    annot=True, 
-    fmt=".2f", 
-    cmap="Blues", 
-    xticklabels=states, 
-    yticklabels=states, 
-    cbar=False, 
-    linewidths=1.5, 
-    linecolor="white",
-    annot_kws={"size": 11, "weight": "bold"},
-    ax=axes[0]
-)
-axes[0].set_title("Transition Flow Matrix\n(Row = Current State ➔ Column = Next State)", fontsize=13, pad=15, weight="bold")
-axes[0].set_ylabel("Current State", fontsize=11, weight="bold")
-axes[0].set_xlabel("Next State", fontsize=11, weight="bold")
-axes[0].tick_params(axis='both', which='major', labelsize=10)
+exact_solution = get_steady_state_algebraic(P)
+iterative_solution = get_steady_state_iterative(P, iterations=100)
 
-# --- Right Panel: 1-Year Student Trajectory Path ---
-axes[1].plot(timeline, numerical_history, color="#0d6efd", linewidth=2.5, marker='o', markersize=4, label="Student Journey")
+print("=== COGNITIVE MODEL STEADY-STATE DISTRIBUTION ===")
+header = f"{'State':<16} | {'Exact Prob':<12} | {'Estimate %':<11} | {'Iterative Prob':<15} | {'Iterative %'}"
+print(header)
+print("-" * len(header))
+for i, state in enumerate(states):
+    ep = f"{exact_solution[i]*100:.2f}%"
+    ip = f"{iterative_solution[i]*100:.2f}%"
+    print(f"{state:<16} | {exact_solution[i]:<12.6f} | {ep:<10} | {iterative_solution[i]:<14.6f} | {ip}")
 
-# Enhance the step-by-step layout
-axes[1].set_title("Simulated Student Progress Journey Over 1 Year", fontsize=13, pad=15, weight="bold")
-axes[1].set_xlabel("Weeks elapsed", fontsize=11, weight="bold")
-axes[1].set_ylabel("Intelligence tier achieved", fontsize=11, weight="bold")
-axes[1].set_yticks(range(len(states)))
-axes[1].set_yticklabels(states, fontsize=10, weight="bold")
-axes[1].set_xlim(0, weeks)
-axes[1].set_ylim(-0.5, len(states) - 0.5)
-
-# Highlight milestones (e.g. hitting Expert tier)
-expert_weeks = [w for w, s in enumerate(numerical_history) if s == 4]
-if expert_weeks:
-    first_expert_week = expert_weeks[0]
-    axes[1].axvline(x=first_expert_week, color="#198754", linestyle="--", linewidth=1.5)
-    axes[1].text(first_expert_week + 0.5, 3.8, f"Hit Expert at Week {first_expert_week}", color="#198754", weight="bold", fontsize=10)
-
-plt.tight_layout()
-plt.show()
+print("\n[Verification] Iterative simulation check after 100 steps:")
+print(np.round(iterative_solution, 6))
